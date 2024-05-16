@@ -1,7 +1,6 @@
 defmodule LedgerTest do
   use ExUnit.Case
 
-  # @tag :pending
   test "empty ledger" do
     assert Ledger.format_entries(:usd, :en_US, []) ==
              """
@@ -9,7 +8,6 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :pending
   test "one entry" do
     entries = [
       %{amount_in_cents: -1000, date: ~D[2015-01-01], description: "Buy present"}
@@ -22,7 +20,7 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :pending
+  @tag :this
   test "credit and debit" do
     entries = [
       %{amount_in_cents: 1000, date: ~D[2015-01-02], description: "Get present"},

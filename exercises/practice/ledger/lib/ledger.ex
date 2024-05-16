@@ -6,99 +6,182 @@ defmodule Ledger do
   @type locale :: :en_US | :nl_NL
   @type entry :: %{amount_in_cents: integer(), date: Date.t(), description: String.t()}
 
-  @spec format_entries(currency(), locale(), list(entry())) :: String.t()
-  def format_entries(currency, locale, entries) do
-    header =
-      if locale == :en_US do
-        "Date       | Description               | Change       \n"
-      else
-        "Datum      | Omschrijving              | Verandering  \n"
-      end
+  # Let's see what this actually does
+  # - seems like there is a header
+  # - iterates over the entries, adding a description and a parens if positive or negative amount
+  # - new line separator
+  # - concept of language, currency and date
+  #   - euro or dollar sign on the amount
+  #   - comma or period in amount
+  #   - language only affects the header
+  #   - date is also different:
+  #     - `-` as separator for US
+  #     - `/` as separator for EU
+  #     - EU -> month day year
+  #     - US -> day month year
+  # - there is a concept of truncating the description if greater than a certain size
+  #
+  # seems like we need to do 2 things:
+  # - solve for the header
+  # - sort the rows by date
+  # - solve for each row
+  #
+  #
+  defmodule LineItem do
+    @moduledoc """
+    Data structure that holds the info we need
+    """
 
-    if entries == [] do
-      header
-    else
-      entries =
-        Enum.sort(entries, fn a, b ->
-          cond do
-            a.date.day < b.date.day -> true
-            a.date.day > b.date.day -> false
-            a.description < b.description -> true
-            a.description > b.description -> false
-            true -> a.amount_in_cents <= b.amount_in_cents
-          end
-        end)
-        |> Enum.map(fn entry -> format_entry(currency, locale, entry) end)
-        |> Enum.join("\n")
+    defstruct [
+      :date,
+      :amount_in_cents,
+      :description,
+      :locale,
+      :currency,
+      :currency_symbol,
+      :currency_separator,
+      :currency_separator_cents,
+      :pretty,
+      :pretty_date,
+      :pretty_amount,
+      :pretty_description
+    ]
 
-      header <> entries <> "\n"
+    def new(args) do
+      struct!(__MODULE__, args)
     end
   end
 
-  defp format_entry(currency, locale, entry) do
-    year = entry.date.year |> to_string()
-    month = entry.date.month |> to_string() |> String.pad_leading(2, "0")
-    day = entry.date.day |> to_string() |> String.pad_leading(2, "0")
+  @spec format_entries(currency(), locale(), list(entry())) :: String.t()
+  def format_entries(_, locale, []) do
+    header(locale)
+  end
 
-    date =
-      if locale == :en_US do
-        month <> "/" <> day <> "/" <> year <> " "
-      else
-        day <> "-" <> month <> "-" <> year <> " "
-      end
+  def format_entries(currency, locale, entries) do
+    header = header(locale)
 
-    number =
-      if locale == :en_US do
-        decimal =
-          entry.amount_in_cents |> abs |> rem(100) |> to_string() |> String.pad_leading(2, "0")
-
-        whole =
-          if abs(div(entry.amount_in_cents, 100)) < 1000 do
-            abs(div(entry.amount_in_cents, 100)) |> to_string()
-          else
-            to_string(div(abs(div(entry.amount_in_cents, 100)), 1000)) <>
-              "," <> to_string(rem(abs(div(entry.amount_in_cents, 100)), 1000))
+    line_items =
+      entries
+      |> Enum.map(fn e ->
+        {currency, currency_symbol, currency_separator, currency_separator_cents} =
+          case locale do
+            :en_US -> {:usd, "$", ",", "."}
+            :nl_NL -> {:eur, "€", ".", ","}
           end
 
-        whole <> "." <> decimal
-      else
-        decimal =
-          entry.amount_in_cents |> abs |> rem(100) |> to_string() |> String.pad_leading(2, "0")
+        e
+        |> Map.put(:locale, locale)
+        |> Map.put(:currency, currency)
+        |> Map.put(:currency_symbol, currency_symbol)
+        |> Map.put(:currency_separator, currency_separator)
+        |> Map.put(:currency_separator_cents, currency_separator_cents)
+        |> LineItem.new()
+        |> handle_pretty_amount()
+        |> handle_pretty_date()
+        |> handle_pretty_description()
+        |> handle_pretty()
+      end)
+      |> sort_line_items()
+      |> Enum.map(fn li -> li.pretty end)
+      |> Enum.join("")
+      |> String.trim()
 
-        whole =
-          if abs(div(entry.amount_in_cents, 100)) < 1000 do
-            abs(div(entry.amount_in_cents, 100)) |> to_string()
-          else
-            to_string(div(abs(div(entry.amount_in_cents, 100)), 1000)) <>
-              "." <> to_string(rem(abs(div(entry.amount_in_cents, 100)), 1000))
-          end
+    header <> line_items <> "\n"
+  end
 
-        whole <> "," <> decimal
+  defp header(:en_US) do
+    "Date       | Description               | Change       \n"
+  end
+
+  defp header(:nl_NL) do
+    "Datum      | Omschrijving              | Verandering  \n"
+  end
+
+  defp handle_pretty_amount(%LineItem{} = li) do
+    amount = String.split("#{li.amount_in_cents}", "", trim: true)
+    cents = Enum.take(amount, -2)
+
+    target = case amount do
+      ["-" = sign | _] -> (amount -- [sign]) -- cents
+      _ -> amount -- cents
+    end
+
+    pretty_amount =
+      target
+      |> Enum.reverse()
+      |> Enum.chunk_every(3)
+      |> Enum.reduce("", fn
+        [c, b, a], acc ->
+          acc <> "#{c}#{b}#{a}#{li.currency_separator}"
+
+        other, acc ->
+          to_add = other |> Enum.reverse() |> Enum.join("")
+          acc <> to_add
+      end)
+
+    pretty_amount =
+      "#{li.currency_symbol}#{pretty_amount}#{li.currency_separator_cents}#{Enum.join(cents, "")}"
+
+    pretty_amount =
+      case amount do
+        ["-" | _] ->
+          "(#{pretty_amount})"
+        _ ->
+          pretty_amount
       end
 
-    amount =
-      if entry.amount_in_cents >= 0 do
-        if locale == :en_US do
-          "  #{if(currency == :eur, do: "€", else: "$")}#{number} "
-        else
-          " #{if(currency == :eur, do: "€", else: "$")} #{number} "
-        end
-      else
-        if locale == :en_US do
-          " (#{if(currency == :eur, do: "€", else: "$")}#{number})"
-        else
-          " #{if(currency == :eur, do: "€", else: "$")} -#{number} "
-        end
-      end
-      |> String.pad_leading(14, " ")
+    Map.put(li, :pretty_amount, pretty_amount)
+  end
 
-    description =
-      if entry.description |> String.length() > 26 do
-        " " <> String.slice(entry.description, 0, 22) <> "..."
-      else
-        " " <> String.pad_trailing(entry.description, 25, " ")
-      end
+  defp handle_pretty_date(%LineItem{locale: :en_US} = li) do
+    {month, day} = pad_month_and_date(li.date)
+    Map.put(li, :pretty_date, "#{month}/#{day}/#{li.date.year}")
+  end
 
-    date <> "|" <> description <> " |" <> amount
+  defp handle_pretty_date(%LineItem{locale: :nl_NL} = li) do
+    {month, day} = pad_month_and_date(li.date)
+    Map.put(li, :pretty_date, "#{day}/#{month}/#{li.date.year}")
+  end
+
+  defp handle_pretty_description(%{description: description} = li)
+       when length(description) > 26 do
+    pretty_description = "" <> String.slice(description, 0, 22) <> "..."
+    Map.put(li, :pretty_description, pretty_description)
+  end
+
+  defp handle_pretty_description(%{description: description} = li) do
+    pretty_description = "" <> String.pad_trailing(description, 25, " ")
+    Map.put(li, :pretty_description, pretty_description)
+  end
+
+  # 01/01/2015 | Freude schoner Gotterf... |   ($1,234.56)
+  defp handle_pretty(li) do
+    currency = String.pad_leading(li.pretty_amount, 14)
+
+    # dbg()
+
+    pretty =
+      "#{li.pretty_date} | #{li.pretty_description} |#{currency}"
+
+    Map.put(li, :pretty, pretty)
+  end
+
+  defp pad_month_and_date(date) do
+    month = "#{date.month}" |> String.pad_leading(2, "0")
+    day = "#{date.day}" |> String.pad_leading(2, "0")
+    {month, day}
+  end
+
+  # I actually thought this was clear
+  defp sort_line_items(line_items) do
+    Enum.sort(line_items, fn a, b ->
+      cond do
+        a.date.day < b.date.day -> true
+        a.date.day > b.date.day -> false
+        a.description < b.description -> true
+        a.description > b.description -> false
+        true -> a.amount_in_cents <= b.amount_in_cents
+      end
+    end)
   end
 end
