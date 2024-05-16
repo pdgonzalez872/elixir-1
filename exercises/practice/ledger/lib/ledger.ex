@@ -86,7 +86,7 @@ defmodule Ledger do
       |> Enum.join("")
       |> String.trim()
 
-    header <> line_items <> "\n"
+    header <> line_items
   end
 
   defp header(:en_US) do
@@ -156,12 +156,11 @@ defmodule Ledger do
 
   # 01/01/2015 | Freude schoner Gotterf... |   ($1,234.56)
   defp handle_pretty(li) do
-    currency = String.pad_leading(li.pretty_amount, 14)
+    currency = String.pad_leading(li.pretty_amount, 12, " ")
 
     # dbg()
 
-    pretty =
-      "#{li.pretty_date} | #{li.pretty_description} |#{currency}"
+    pretty = Enum.join([li.pretty_date, li.pretty_description, currency], " | ")
 
     Map.put(li, :pretty, pretty)
   end
