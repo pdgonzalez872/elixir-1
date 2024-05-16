@@ -1,5 +1,5 @@
 defmodule LibraryFees do
-  def datetime_from_string(string) do
+  def datetime_from_string(string) when is_binary(string) do
     {:ok, n} = NaiveDateTime.from_iso8601(string)
     n
   end
@@ -36,6 +36,7 @@ defmodule LibraryFees do
     |> case do
       0 ->
         0
+
       days when days < 0 ->
         abs(days)
 
@@ -44,7 +45,7 @@ defmodule LibraryFees do
     end
   end
 
-  def monday?(datetime) do
+  def monday?(%NaiveDateTime{} = datetime) do
     datetime
     |> NaiveDateTime.to_erl()
     |> then(fn {to_check, _} -> to_check end)
@@ -56,35 +57,30 @@ defmodule LibraryFees do
   end
 
   def calculate_late_fee(checkout, return, rate) do
-    checkout = checkout |> datetime_from_string() |> NaiveDateTime.to_date()
+    checkout = checkout |> datetime_from_string()
     return = datetime_from_string(return)
 
-    date_diff = days_late(checkout, return)
-    exactly_29 = date_diff == 29
-    before_noon = before_noon?(return)
+    date_diff = days_late(NaiveDateTime.to_date(checkout), return)
     days_to_charge = date_diff - 28
 
     cond do
       date_diff < 28 ->
         0
 
-      date_diff == 28 and not before_noon ->
+      date_diff == 28 and not before_noon?(checkout) ->
         0
 
-      date_diff <= 28 and not before_noon ->
+      date_diff == 29 and not before_noon?(checkout) ->
         0
 
-      date_diff == 29 and not before_noon ->
-        0
+      date_diff == 30 and not before_noon?(checkout) ->
+        (days_to_charge - 1) * rate
 
-      date_diff == 30 and not before_noon ->
-        rate * (days_to_charge - 1)
-
-      date_diff == 29 and before_noon ->
-        rate * days_to_charge
+      date_diff == 29 and before_noon?(checkout) ->
+        days_to_charge * rate
 
       monday?(return) ->
-        trunc((rate * 0.5) * days_to_charge)
+        trunc(days_to_charge * (rate * 0.5))
 
       true ->
         rate * days_to_charge

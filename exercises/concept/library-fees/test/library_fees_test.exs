@@ -133,12 +133,6 @@ defmodule LibraryFeesTest do
     end
 
     @tag task_id: 6
-    test "returns the rate for one day if the book was returned exactly 29 days after a morning checkout" do
-      result = LibraryFees.calculate_late_fee("2018-11-01T09:00:00Z", "2018-11-30T14:12:00Z", 320)
-      assert result == 320
-    end
-
-    @tag task_id: 6
     test "returns 0 if the book was returned less than 29 days after an afternoon checkout" do
       result = LibraryFees.calculate_late_fee("2019-05-01T16:12:00Z", "2019-05-17T14:32:45Z", 400)
       assert result == 0
@@ -150,19 +144,21 @@ defmodule LibraryFeesTest do
       assert result == 0
     end
 
-    @tag task_id: 6
+    test "returns the rate for one day if the book was returned exactly 29 days after a morning checkout" do
+      result = LibraryFees.calculate_late_fee("2018-11-01T09:00:00Z", "2018-11-30T14:12:00Z", 320)
+      assert result == 320
+    end
+
     test "returns the rate for one day if the book was returned exactly 30 days after an afternoon checkout" do
       result = LibraryFees.calculate_late_fee("2019-05-01T16:12:00Z", "2019-05-31T14:32:45Z", 234)
       assert result == 234
     end
 
-    @tag task_id: 6
     test "multiplies the number of days late by the rate for one day" do
       result = LibraryFees.calculate_late_fee("2021-01-01T08:00:00Z", "2021-02-13T08:00:00Z", 111)
       assert result == 111 * 15
     end
 
-    @tag task_id: 6
     test "late fees are 50% off (rounded down) when the book is returned on a Monday" do
       result = LibraryFees.calculate_late_fee("2021-01-01T08:00:00Z", "2021-02-15T08:00:00Z", 111)
       assert result == trunc(111 * 17 * 0.5)
