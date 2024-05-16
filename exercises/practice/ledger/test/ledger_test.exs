@@ -1,6 +1,28 @@
 defmodule LedgerTest do
   use ExUnit.Case
 
+  # Let's see what this actually does
+  # - seems like there is a header
+  # - iterates over the entries, adding a description and a parens if positive or negative amount
+  # - new line separator
+  # - concept of language, currency and date
+  #   - euro or dollar sign on the amount
+  #   - comma or period in amount
+  #   - language only affects the header
+  #   - date is also different:
+  #     - `-` as separator for US
+  #     - `/` as separator for EU
+  #     - EU -> month day year
+  #     - US -> day month year
+  # - there is a concept of truncating the description if greater than a certain size
+  #
+  # seems like we need to do 2 things:
+  # - solve for the header
+  # - sort the rows by date
+  # - solve for each row
+  #
+  #
+
   test "empty ledger" do
     assert Ledger.format_entries(:usd, :en_US, []) ==
              """
@@ -20,19 +42,22 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :this
   test "credit and debit" do
     entries = [
       %{amount_in_cents: 1000, date: ~D[2015-01-02], description: "Get present"},
       %{amount_in_cents: -1000, date: ~D[2015-01-01], description: "Buy present"}
     ]
 
-    assert Ledger.format_entries(:usd, :en_US, entries) ==
-             """
-             Date       | Description               | Change\s\s\s\s\s\s\s
-             01/01/2015 | Buy present               |      ($10.00)
-             01/02/2015 | Get present               |       $10.00\s
-             """
+    result = Ledger.format_entries(:usd, :en_US, entries)
+
+    expected =
+      """
+      Date       | Description               | Change\s\s\s\s\s\s\s
+      01/01/2015 | Buy present               |      ($10.00)
+      01/02/2015 | Get present               |       $10.00\s
+      """
+
+    assert result == expected
   end
 
   @tag :pending

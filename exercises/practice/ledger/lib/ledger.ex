@@ -6,27 +6,6 @@ defmodule Ledger do
   @type locale :: :en_US | :nl_NL
   @type entry :: %{amount_in_cents: integer(), date: Date.t(), description: String.t()}
 
-  # Let's see what this actually does
-  # - seems like there is a header
-  # - iterates over the entries, adding a description and a parens if positive or negative amount
-  # - new line separator
-  # - concept of language, currency and date
-  #   - euro or dollar sign on the amount
-  #   - comma or period in amount
-  #   - language only affects the header
-  #   - date is also different:
-  #     - `-` as separator for US
-  #     - `/` as separator for EU
-  #     - EU -> month day year
-  #     - US -> day month year
-  # - there is a concept of truncating the description if greater than a certain size
-  #
-  # seems like we need to do 2 things:
-  # - solve for the header
-  # - sort the rows by date
-  # - solve for each row
-  #
-  #
   defmodule LineItem do
     @moduledoc """
     Data structure that holds the info we need
@@ -83,10 +62,10 @@ defmodule Ledger do
       end)
       |> sort_line_items()
       |> Enum.map(fn li -> li.pretty end)
-      |> Enum.join("")
-      |> String.trim()
+      |> Enum.join("\n")
+      |> String.trim(" \n")
 
-    header <> line_items
+    header <> line_items <> "\n"
   end
 
   defp header(:en_US) do
@@ -101,10 +80,11 @@ defmodule Ledger do
     amount = String.split("#{li.amount_in_cents}", "", trim: true)
     cents = Enum.take(amount, -2)
 
-    target = case amount do
-      ["-" = sign | _] -> (amount -- [sign]) -- cents
-      _ -> amount -- cents
-    end
+    target =
+      case amount do
+        ["-" = sign | _] -> (amount -- [sign]) -- cents
+        _ -> amount -- cents
+      end
 
     pretty_amount =
       target
@@ -126,8 +106,9 @@ defmodule Ledger do
       case amount do
         ["-" | _] ->
           "(#{pretty_amount})"
+
         _ ->
-          pretty_amount
+          "#{pretty_amount} "
       end
 
     Map.put(li, :pretty_amount, pretty_amount)
@@ -156,9 +137,7 @@ defmodule Ledger do
 
   # 01/01/2015 | Freude schoner Gotterf... |   ($1,234.56)
   defp handle_pretty(li) do
-    currency = String.pad_leading(li.pretty_amount, 12, " ")
-
-    # dbg()
+    currency = String.pad_leading(li.pretty_amount, 13, " ")
 
     pretty = Enum.join([li.pretty_date, li.pretty_description, currency], " | ")
 
