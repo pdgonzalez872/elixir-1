@@ -60,7 +60,6 @@ defmodule LedgerTest do
     assert result == expected
   end
 
-  @tag :pending
   test "multiple entries on same date ordered by description" do
     entries = [
       %{amount_in_cents: 1000, date: ~D[2015-01-01], description: "Get present"},
@@ -75,7 +74,6 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :pending
   test "final order tie breaker is change" do
     entries = [
       %{amount_in_cents: 0, date: ~D[2015-01-01], description: "Something"},
@@ -83,16 +81,22 @@ defmodule LedgerTest do
       %{amount_in_cents: 1, date: ~D[2015-01-01], description: "Something"}
     ]
 
-    assert Ledger.format_entries(:usd, :en_US, entries) ==
-             """
-             Date       | Description               | Change\s\s\s\s\s\s\s
-             01/01/2015 | Something                 |       ($0.01)
-             01/01/2015 | Something                 |        $0.00\s
-             01/01/2015 | Something                 |        $0.01\s
-             """
+    result = Ledger.format_entries(:usd, :en_US, entries)
+
+    expected =
+      """
+      Date       | Description               | Change\s\s\s\s\s\s\s
+      01/01/2015 | Something                 |       ($0.01)
+      01/01/2015 | Something                 |        $0.00\s
+      01/01/2015 | Something                 |        $0.01\s
+      """
+
+    IO.puts(result)
+    IO.puts(expected)
+
+    assert result == expected
   end
 
-  @tag :pending
   test "overlong description is truncated" do
     entries = [
       %{
@@ -102,14 +106,17 @@ defmodule LedgerTest do
       }
     ]
 
-    assert Ledger.format_entries(:usd, :en_US, entries) ==
-             """
-             Date       | Description               | Change\s\s\s\s\s\s\s
-             01/01/2015 | Freude schoner Gotterf... |   ($1,234.56)
-             """
+    result = Ledger.format_entries(:usd, :en_US, entries)
+
+    expected =
+      """
+      Date       | Description               | Change\s\s\s\s\s\s\s
+      01/01/2015 | Freude schoner Gotterf... |   ($1,234.56)
+      """
+
+    assert result == expected
   end
 
-  @tag :pending
   test "euros" do
     entries = [
       %{amount_in_cents: -1000, date: ~D[2015-01-01], description: "Buy present"}
@@ -122,7 +129,6 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :pending
   test "Dutch locale" do
     entries = [
       %{amount_in_cents: 123_456, date: ~D[2015-03-12], description: "Buy present"}
@@ -135,7 +141,6 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :pending
   test "Dutch locale and euros" do
     entries = [
       %{amount_in_cents: 123_456, date: ~D[2015-03-12], description: "Buy present"}
@@ -148,7 +153,6 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :pending
   test "Dutch negative number with 3 digits before decimal point" do
     entries = [
       %{amount_in_cents: -12345, date: ~D[2015-03-12], description: "Buy present"}
@@ -161,7 +165,6 @@ defmodule LedgerTest do
              """
   end
 
-  @tag :pending
   test "American negative number with 3 digits before decimal point" do
     entries = [
       %{amount_in_cents: -12345, date: ~D[2015-03-12], description: "Buy present"}

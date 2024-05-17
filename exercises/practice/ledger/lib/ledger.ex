@@ -2,9 +2,6 @@ defmodule Ledger do
   @doc """
   Format the given entries given a currency and locale
   """
-  @type currency :: :usd | :eur
-  @type locale :: :en_US | :nl_NL
-  @type entry :: %{amount_in_cents: integer(), date: Date.t(), description: String.t()}
 
   defmodule LineItem do
     @moduledoc """
@@ -31,7 +28,6 @@ defmodule Ledger do
     end
   end
 
-  @spec format_entries(currency(), locale(), list(entry())) :: String.t()
   def format_entries(_, locale, []) do
     header(locale)
   end
@@ -42,10 +38,16 @@ defmodule Ledger do
     line_items =
       entries
       |> Enum.map(fn e ->
-        {currency, currency_symbol, currency_separator, currency_separator_cents} =
+        currency_symbol =
+          case currency do
+            :usd -> "$"
+            :eur -> "€"
+          end
+
+        {currency_separator, currency_separator_cents} =
           case locale do
-            :en_US -> {:usd, "$", ",", "."}
-            :nl_NL -> {:eur, "€", ".", ","}
+            :en_US -> {",", "."}
+            :nl_NL -> {".", ","}
           end
 
         e
@@ -78,37 +80,37 @@ defmodule Ledger do
 
   defp handle_pretty_amount(%LineItem{} = li) do
     amount = String.split("#{li.amount_in_cents}", "", trim: true)
-    cents = Enum.take(amount, -2)
-
-    target =
-      case amount do
-        ["-" = sign | _] -> (amount -- [sign]) -- cents
-        _ -> amount -- cents
-      end
-
-    pretty_amount =
-      target
-      |> Enum.reverse()
-      |> Enum.chunk_every(3)
-      |> Enum.reduce("", fn
-        [c, b, a], acc ->
-          acc <> "#{c}#{b}#{a}#{li.currency_separator}"
-
-        other, acc ->
-          to_add = other |> Enum.reverse() |> Enum.join("")
-          acc <> to_add
-      end)
-
-    pretty_amount =
-      "#{li.currency_symbol}#{pretty_amount}#{li.currency_separator_cents}#{Enum.join(cents, "")}"
 
     pretty_amount =
       case amount do
-        ["-" | _] ->
-          "(#{pretty_amount})"
+        [cent] ->
+          format_pretty_amount(li, "0#{li.currency_separator_cents}0#{cent}")
 
-        _ ->
-          "#{pretty_amount} "
+        ["-", cent] ->
+          format_pretty_amount(li, "0#{li.currency_separator_cents}0#{cent}")
+
+        _other ->
+          cents = Enum.take(amount, -2)
+
+          target =
+            case amount do
+              ["-" = sign | _] -> (amount -- [sign]) -- cents
+              _ -> amount -- cents
+            end
+
+          pretty_amount =
+            target
+            |> Enum.reverse()
+            |> Enum.chunk_every(3)
+            |> Enum.map(fn threes -> Enum.join(threes, "") end)
+            |> Enum.intersperse(li.currency_separator)
+            |> Enum.join("")
+            |> String.reverse()
+
+          format_pretty_amount(
+            li,
+            "#{pretty_amount}#{li.currency_separator_cents}#{Enum.join(cents, "")}"
+          )
       end
 
     Map.put(li, :pretty_amount, pretty_amount)
@@ -121,21 +123,20 @@ defmodule Ledger do
 
   defp handle_pretty_date(%LineItem{locale: :nl_NL} = li) do
     {month, day} = pad_month_and_date(li.date)
-    Map.put(li, :pretty_date, "#{day}/#{month}/#{li.date.year}")
-  end
-
-  defp handle_pretty_description(%{description: description} = li)
-       when length(description) > 26 do
-    pretty_description = "" <> String.slice(description, 0, 22) <> "..."
-    Map.put(li, :pretty_description, pretty_description)
+    Map.put(li, :pretty_date, "#{day}-#{month}-#{li.date.year}")
   end
 
   defp handle_pretty_description(%{description: description} = li) do
-    pretty_description = "" <> String.pad_trailing(description, 25, " ")
+    pretty_description =
+      if String.length(description) > 26 do
+        "" <> String.slice(description, 0, 22) <> "..."
+      else
+        "" <> String.pad_trailing(description, 25, " ")
+      end
+
     Map.put(li, :pretty_description, pretty_description)
   end
 
-  # 01/01/2015 | Freude schoner Gotterf... |   ($1,234.56)
   defp handle_pretty(li) do
     currency = String.pad_leading(li.pretty_amount, 13, " ")
 
@@ -150,7 +151,23 @@ defmodule Ledger do
     {month, day}
   end
 
-  # I actually thought this was clear
+  defp format_pretty_amount(%{locale: :en_US} = li, pretty_amount) do
+    if li.amount_in_cents >= 0 do
+      "#{li.currency_symbol}#{pretty_amount} "
+    else
+      "(#{li.currency_symbol}#{pretty_amount})"
+    end
+  end
+
+  defp format_pretty_amount(%{locale: :nl_NL} = li, pretty_amount) do
+    if li.amount_in_cents >= 0 do
+      "#{li.currency_symbol} #{pretty_amount} "
+    else
+      "#{li.currency_symbol} -#{pretty_amount} "
+    end
+  end
+
+  # I thought this was clear to begin with, I like this impl
   defp sort_line_items(line_items) do
     Enum.sort(line_items, fn a, b ->
       cond do
